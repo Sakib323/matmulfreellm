@@ -6,6 +6,11 @@ from mmfreelm.ops.fusedbitnet import FusedBitLinear as BitLinear
 class RotaryEmbedding(nn.Module):
     def __init__(self, dim, max_position_embeddings=2048, base=10000, use_ternary=False):
         super().__init__()
+
+        print(f"\n[RotaryEmbedding] Initialized with: "
+              f"dim={dim}, max_pos={max_position_embeddings}, "
+              f"base={base}, ternary={use_ternary}\n")
+
         self.dim = dim
         self.max_position_embeddings = max_position_embeddings
         self.base = base
