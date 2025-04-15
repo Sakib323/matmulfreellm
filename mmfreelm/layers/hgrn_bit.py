@@ -36,6 +36,8 @@ class HGRNBitAttention(nn.Module):
     ) -> HGRNAttention:
         super().__init__()
 
+        print(f"Initializing RotaryEmbedding with theta={rope_theta} and ternary={use_ternary_rope}") 
+
         self.mode = mode
         self.hidden_size = hidden_size
         self.num_heads = num_heads
