@@ -34,6 +34,8 @@ class HGRNBitConfig(PretrainedConfig):
         tie_word_embeddings: bool = False,
         initializer_range: float = 0.02,
         fuse_cross_entropy: bool = True,
+        rope_theta: float = 10000.0,
+        use_ternary_rope: bool = False,
         **kwargs
     ):
         self.vocab_size = vocab_size
@@ -54,6 +56,9 @@ class HGRNBitConfig(PretrainedConfig):
         self.use_cache = use_cache
         self.initializer_range = initializer_range
         self.fuse_cross_entropy = fuse_cross_entropy
+
+        self.rope_theta = rope_theta
+        self.use_ternary_rope = use_ternary_rope
 
         super().__init__(
             pad_token_id=pad_token_id,

@@ -66,15 +66,17 @@ class HGRNBitBlock(nn.Module):
 
         self.attn_norm = RMSNorm(hidden_size=config.hidden_size, eps=config.rms_norm_eps)
         self.attn = HGRNBitAttention(
-            mode=config.attn_mode,
-            hidden_size=config.hidden_size,
-            num_heads=config.num_heads,
-            expand_ratio=config.expand_ratio,
-            use_short_conv=config.use_short_conv,
-            conv_size=config.conv_size,
-            share_conv_kernel=config.share_conv_kernel,
-            layernorm_eps=config.rms_norm_eps,
-            layer_idx=layer_idx
+    mode=config.attn_mode,
+    hidden_size=config.hidden_size,
+    num_heads=config.num_heads,
+    expand_ratio=config.expand_ratio,
+    use_short_conv=config.use_short_conv,
+    conv_size=config.conv_size,
+    share_conv_kernel=config.share_conv_kernel,
+    layernorm_eps=config.rms_norm_eps,
+    layer_idx=layer_idx,  # Add comma here
+    rope_theta=config.rope_theta,
+    use_ternary_rope=config.use_ternary_rope
         )
         self.mlp_norm = RMSNorm(hidden_size=config.hidden_size, eps=config.rms_norm_eps)
         self.mlp = HGRNBitMLP(
