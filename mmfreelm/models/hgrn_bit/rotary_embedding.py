@@ -4,7 +4,7 @@ import torch.nn as nn
 from mmfreelm.ops.fusedbitnet import FusedBitLinear as BitLinear
 
 class RotaryEmbedding(nn.Module):
-    def __init__(self, dim, max_position_embeddings=2048, base=10000, use_ternary=False):
+    def __init__(self, dim, max_position_embeddings=2048, base=10000, use_ternary=True):
         super().__init__()
 
         print(f"\n[RotaryEmbedding] Initialized with: "
