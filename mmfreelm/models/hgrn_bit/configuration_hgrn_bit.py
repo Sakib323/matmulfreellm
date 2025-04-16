@@ -35,7 +35,7 @@ class HGRNBitConfig(PretrainedConfig):
         initializer_range: float = 0.02,
         fuse_cross_entropy: bool = True,
         rope_theta: float = 10000.0,
-        use_ternary_rope: bool = False,
+        use_ternary_rope: bool = True,
         **kwargs
     ):
         self.vocab_size = vocab_size
