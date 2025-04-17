@@ -34,6 +34,7 @@ class HGRNBitConfig(PretrainedConfig):
         tie_word_embeddings: bool = False,
         initializer_range: float = 0.02,
         fuse_cross_entropy: bool = True,
+        rotary_embeddings: bool = True,
         rope_theta: float = 10000.0,
         use_ternary_rope: bool = True,
         **kwargs
@@ -57,6 +58,7 @@ class HGRNBitConfig(PretrainedConfig):
         self.initializer_range = initializer_range
         self.fuse_cross_entropy = fuse_cross_entropy
 
+        self.rotary_embeddings = rotary_embeddings
         self.rope_theta = rope_theta
         self.use_ternary_rope = use_ternary_rope
 

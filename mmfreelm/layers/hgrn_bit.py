@@ -31,6 +31,7 @@ class HGRNBitAttention(nn.Module):
         share_conv_kernel: bool = True,
         layernorm_eps: float = 1e-5,
         layer_idx: int = None,
+        rotary_embeddings: bool = True, 
         rope_theta: float = 10000.0,
         use_ternary_rope: bool = False,
     ) -> HGRNAttention:
@@ -71,13 +72,14 @@ class HGRNBitAttention(nn.Module):
         self.g_norm = FusedRMSNormSwishGate(self.input_dim, layernorm_eps)
         self.o_proj = BitLinear(self.input_dim, hidden_size, bias=False)
 
-        # Add rotary embeddings
-        self.rotary_emb = RotaryEmbedding(
-            dim=self.head_dim,
-            max_position_embeddings=2048,  # You might want to make this configurable
-            base=rope_theta,
-            use_ternary=use_ternary_rope
-        )
+        self.rotary_embeddings = rotary_embeddings
+        if self.rotary_embeddings:
+            self.rotary_emb = RotaryEmbedding(
+                dim=self.head_dim,
+                max_position_embeddings=2048,
+                base=rope_theta,
+                use_ternary=use_ternary_rope
+            )
 
         self.apply(self._initialize_weights)
 
@@ -133,10 +135,10 @@ class HGRNBitAttention(nn.Module):
         i = rearrange(i, 'b l (h d) -> b h l d', h=self.num_heads)
         f = rearrange(f, 'b l (h d) -> b h l d', h=self.num_heads)
         
-        # Apply rotary embeddings
-        seq_len = i.shape[2]
-        cos, sin = self.rotary_emb(i, seq_len=seq_len)
-        i, f = apply_rotary_pos_emb(i, f, cos, sin)
+        if self.rotary_embeddings:
+            seq_len = i.shape[2]
+            cos, sin = self.rotary_emb(i, seq_len=seq_len)
+            i, f = apply_rotary_pos_emb(i, f, cos, sin)
 
         recurrent_state = last_state[-1] if use_cache else None
         if mode == 'fused_recurrent':
