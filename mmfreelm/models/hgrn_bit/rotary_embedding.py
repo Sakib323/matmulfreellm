@@ -26,8 +26,7 @@ class RotaryEmbedding(nn.Module):
         self._set_cos_sin_cache(
             seq_len=max_position_embeddings,
             device=self.inv_freq.device,
-            dtype=torch.get_default_dtype()
-        )
+            dtype=torch.get_default_dtype())
 
     def _get_ternary_init(self, dim):
         # Ternary initialization (-1, 0, 1)

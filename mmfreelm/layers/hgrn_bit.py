@@ -31,7 +31,7 @@ class HGRNBitAttention(nn.Module):
         share_conv_kernel: bool = True,
         layernorm_eps: float = 1e-5,
         layer_idx: int = None,
-        rotary_embeddings: bool = False, 
+        rotary_embeddings: bool = True, 
         rope_theta: float = 10000.0,
         use_ternary_rope: bool = False,
     ) -> HGRNAttention:
