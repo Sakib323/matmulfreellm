@@ -37,7 +37,14 @@ class HGRNBitConfig(PretrainedConfig):
         rotary_embeddings: bool = True,
         rope_theta: float = 10000.0,
         use_ternary_rope: bool = True,
+
+        moe: bool = False,  # <-- NEW FLAG
+        num_experts: int = 8,
+        num_experts_per_tok: int = 2,
+        moe_intermediate_size: Optional[int] = None,
+
         **kwargs
+        
     ):
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
@@ -61,6 +68,12 @@ class HGRNBitConfig(PretrainedConfig):
         self.rotary_embeddings = rotary_embeddings
         self.rope_theta = rope_theta
         self.use_ternary_rope = use_ternary_rope
+
+        self.moe = moe  # <-- NEW
+        self.num_experts = num_experts
+        self.num_experts_per_tok = num_experts_per_tok
+        self.moe_intermediate_size = moe_intermediate_size or (hidden_size * 4)
+        # Rest of existing initialization...
 
         super().__init__(
             pad_token_id=pad_token_id,

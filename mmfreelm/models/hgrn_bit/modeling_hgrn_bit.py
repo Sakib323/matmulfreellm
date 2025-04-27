@@ -22,7 +22,7 @@ from mmfreelm.modules import FusedCrossEntropyLoss, RMSNorm
 from mmfreelm.modules.activations import swiglu_linear, swiglu
 #from mmfreelm.ops.bitnet import BitLinear_Fuse as BitLinear
 from mmfreelm.ops.fusedbitnet import FusedBitLinear as BitLinear
-
+from mmfreelm.models.hgrn_bit.hgrn_bit_moe import HGRNBitMoE
 logger = logging.get_logger(__name__)
 
 
@@ -77,12 +77,22 @@ class HGRNBitBlock(nn.Module):
             layer_idx=layer_idx
         )
         self.mlp_norm = RMSNorm(hidden_size=config.hidden_size, eps=config.rms_norm_eps)
-        self.mlp = HGRNBitMLP(
-            hidden_size=config.hidden_size,
-            hidden_ratio=config.hidden_ratio,
-            intermediate_size=config.intermediate_size,
-            hidden_act=config.hidden_act
-        )
+
+
+        if config.moe:  # <-- CONDITIONAL CHECK
+            self.mlp = HGRNBitMoE(
+                hidden_size=config.hidden_size,
+                intermediate_size=config.moe_intermediate_size,
+                num_experts=config.num_experts,
+                num_experts_per_tok=config.num_experts_per_tok
+            )
+        else:
+            self.mlp = HGRNBitMLP(
+                hidden_size=config.hidden_size,
+                intermediate_size=config.intermediate_size,
+                hidden_act=config.hidden_act
+            )
+            
 
     def forward(
         self,
