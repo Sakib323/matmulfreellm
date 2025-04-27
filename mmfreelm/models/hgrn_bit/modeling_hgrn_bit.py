@@ -79,7 +79,8 @@ class HGRNBitBlock(nn.Module):
         self.mlp_norm = RMSNorm(hidden_size=config.hidden_size, eps=config.rms_norm_eps)
 
 
-        if config.moe:  # <-- CONDITIONAL CHECK
+        # Modified MLP initialization
+        if config.moe:
             self.mlp = HGRNBitMoE(
                 hidden_size=config.hidden_size,
                 intermediate_size=config.moe_intermediate_size,
