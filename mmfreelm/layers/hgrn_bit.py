@@ -1,183 +1,92 @@
-# -*- coding: utf-8 -*-
-
-# "HGRN2: Gated Linear RNNs with State Expansion"[https://arxiv.org/abs/2404.07904]
-
-from __future__ import annotations
-
-from typing import Optional, Tuple
-
+# hgrn_bit_moe.py
 import torch
 import torch.nn as nn
-from einops import rearrange
-from transformers.cache_utils import Cache
+from torch import Tensor
+from typing import Optional
 
-from mmfreelm.modules import FusedRMSNormSwishGate, ShortConvolution
-from mmfreelm.modules.activations import swiglu
-from mmfreelm.ops.hgrn.recurrent_fuse import fused_recurrent_hgrn
-from mmfreelm.models.hgrn_bit.rotary_embedding import RotaryEmbedding, apply_rotary_pos_emb
-#from mmfreelm.ops.bitnet import BitLinear_Fuse as BitLinear
 from mmfreelm.ops.fusedbitnet import FusedBitLinear as BitLinear
+from mmfreelm.modules import RMSNorm
+from mmfreelm.models.modeling_hgrn_bit import HGRNBitMLP  # Import HGRNBitMLP
 
-class HGRNBitAttention(nn.Module):
-    def __init__(
-        self,
-        mode: str = 'fused_recurrent',
-        hidden_size: int = 1024,
-        num_heads: Optional[int] = None,
-        expand_ratio: Optional[int] = 1,
-        use_short_conv: bool = False,
-        conv_size: int = 4,
-        conv_bias: bool = False,
-        share_conv_kernel: bool = True,
-        layernorm_eps: float = 1e-5,
-        layer_idx: int = None,
-        rotary_embeddings: bool = True, 
-        rope_theta: float = 10000.0,
-        use_ternary_rope: bool = False,
-    ) -> HGRNAttention:
+
+class HGRNBitMoE(nn.Module):
+    def __init__(self, config):
         super().__init__()
-        if rotary_embeddings:
-            print(f"Initializing RotaryEmbedding with theta={rope_theta} and ternary={use_ternary_rope}") 
+        self.config = config
+        self.hidden_size = config.hidden_size
+        self.num_experts = config.num_experts
+        self.top_k = config.num_experts_per_tok
+        self.expert_capacity = int(config.moe_intermediate_size * 1.5)  # Buffer capacity
 
-        self.mode = mode
-        self.hidden_size = hidden_size
-        self.num_heads = num_heads
-        self.expand_ratio = expand_ratio
-        self.input_dim = int(hidden_size * expand_ratio)
-        self.head_dim = self.input_dim // self.num_heads
+        # Expert parameters
+        self.experts = nn.ModuleList([
+            HGRNBitMLP(
+                hidden_size=config.hidden_size,
+                intermediate_size=config.moe_intermediate_size,
+                hidden_act=config.hidden_act
+            ) for _ in range(config.num_experts)
+        ])
 
-        self.use_short_conv = use_short_conv
-        self.conv_size = conv_size
-        self.conv_bias = conv_bias
-        self.share_conv_kernel = share_conv_kernel
+        # Router using BitLinear for ternary quantization
+        self.gate_norm = RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.gate = BitLinear(config.hidden_size, config.num_experts, bias=False)
 
-        self.layer_idx = layer_idx
+        # Load balancing loss
+        self.aux_loss = torch.tensor(0.0)
+        self.register_buffer("expert_counts", torch.zeros(config.num_experts))
 
-        assert mode in ['fused_recurrent'], f"Not suppoerted mode `{mode}`."
-        assert self.hidden_size % num_heads == 0, f"hidden size must be divisible by num_heads of {num_heads}"
+    def forward(self, x: Tensor) -> Tensor:
+        batch_size, seq_len, _ = x.size()
+        x_flat = x.view(-1, self.hidden_size)
 
-        self.i_proj = BitLinear(hidden_size, self.input_dim, bias=False)
-        self.f_proj = BitLinear(hidden_size, self.input_dim, bias=False)
-        self.g_proj = BitLinear(hidden_size, self.input_dim, bias=False)
+        # Router logic with ternary quantization
+        x_norm = self.gate_norm(x_flat)
+        gate_logits = self.gate(x_norm)
 
-        if use_short_conv:
-            self.conv_size = conv_size
-            if share_conv_kernel:
-                self.h_conv1d = ShortConvolution(hidden_size, conv_size, activation='silu')
+        # Gating with top-k expert selection
+        top_k_weights, top_k_indices = torch.topk(
+            gate_logits.softmax(dim=-1),
+            self.top_k,
+            dim=-1
+        )
+
+        # Expert capacity calculation
+        capacity = min(self.expert_capacity, batch_size * seq_len // self.num_experts)
+        expert_mask = torch.zeros_like(gate_logits).scatter_(
+            1, top_k_indices, top_k_weights
+        )
+
+        # Expert computation with load balancing
+        outputs = torch.zeros_like(x_flat)
+        aux_loss = 0.0
+
+        for expert_idx in range(self.num_experts):
+            # Get tokens assigned to this expert
+            mask = expert_mask[:, expert_idx].bool()
+            if mask.sum() == 0:
+                continue
+
+            # Apply capacity constraint
+            masked_indices = torch.where(mask)[0]
+            if len(masked_indices) > capacity:
+                selected_indices = masked_indices[:capacity]
+                mask[masked_indices[capacity:]] = False
             else:
-                self.q_conv1d = ShortConvolution(self.input_dim, conv_size, activation='silu')
-                self.f_conv1d = ShortConvolution(self.input_dim, conv_size, activation='silu')
-                self.i_conv1d = ShortConvolution(self.input_dim, conv_size, activation='silu')
+                selected_indices = masked_indices
 
-        self.g_norm = FusedRMSNormSwishGate(self.input_dim, layernorm_eps)
-        self.o_proj = BitLinear(self.input_dim, hidden_size, bias=False)
+            # Process tokens with expert
+            expert_input = x_flat[selected_indices]
+            expert_output = self.experts[expert_idx](expert_input)
 
-        self.rotary_embeddings = rotary_embeddings
-        if self.rotary_embeddings:
-            self.rotary_emb = RotaryEmbedding(
-                dim=self.head_dim,
-                max_position_embeddings=2048,
-                base=rope_theta,
-                use_ternary=use_ternary_rope
-            )
+            # Weighted sum of expert outputs
+            weights = top_k_weights[selected_indices, torch.where(top_k_indices[selected_indices] == expert_idx)[1]]
+            outputs[selected_indices] += weights.unsqueeze(-1) * expert_output
 
-        self.apply(self._initialize_weights)
+            # Load balancing statistics
+            self.expert_counts[expert_idx] += mask.sum().item()
+            aux_loss += mask.float().mean() * expert_idx  # Simple load balancing
 
-    def _initialize_weights(self, module):
-        if getattr(module, "_is_hf_initialized", False):
-            return
-        if isinstance(module, (nn.Linear, BitLinear)):
-            nn.init.xavier_uniform_(module.weight, gain=2 ** -2.5)
-            if module.bias is not None:
-                nn.init.zeros_(module.bias)
-        module._is_hf_initialized = True
+        # Calculate auxiliary loss
+        self.aux_loss = aux_loss / self.num_experts
 
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
-        past_key_values: Optional[Cache] = None,
-        use_cache: Optional[bool] = False,
-        output_attentions: Optional[bool] = False,
-        lower_bound: Optional[torch.Tensor] = None,
-        **kwargs
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Cache]]:
-        # launching the triton kernel for just one token will actually be slower
-        mode = 'fused_recurrent' if hidden_states.shape[1] == 1 else self.mode
-
-        last_state = past_key_values[self.layer_idx] if use_cache else None
-        if self.use_short_conv:
-            conv_state = last_state[0] if use_cache else None
-            if self.share_conv_kernel:
-                # conv state is updated inplace
-                hidden_states = self.h_conv1d(hidden_states, attention_mask, conv_state)
-                i = self.i_proj(hidden_states)
-                f = self.f_proj(hidden_states)
-            else:
-                conv_state_i = last_state[2] if use_cache else None
-                conv_state_f = last_state[1] if use_cache else None
-                i = self.i_conv1d(self.i_proj(hidden_states), attention_mask, conv_state_i)
-                f = self.f_conv1d(self.f_proj(hidden_states), attention_mask, conv_state_f)
-        else:
-            i = self.i_proj(hidden_states)
-            f = self.f_proj(hidden_states)
-
-        f = f.sigmoid()
-        # the lower bound for the first layer is zero
-        if lower_bound is not None and self.layer_idx > 0:
-            f = lower_bound + (1 - lower_bound) * f
-        i = swiglu(i, 1 - f)
-        # dealing with left-padding
-        if attention_mask is not None:
-            i = i.mul_(attention_mask.unsqueeze(-1))
-            
-        # Reshape for rotary embeddings
-        i = rearrange(i, 'b l (h d) -> b h l d', h=self.num_heads)
-        f = rearrange(f, 'b l (h d) -> b h l d', h=self.num_heads)
-        
-        if self.rotary_embeddings:
-            seq_len = i.shape[2]
-            cos, sin = self.rotary_emb(i, seq_len=seq_len)
-            i, f = apply_rotary_pos_emb(i, f, cos, sin)
-
-        recurrent_state = last_state[-1] if use_cache else None
-        if mode == 'fused_recurrent':
-            o, recurrent_state = fused_recurrent_hgrn(i, f, initial_state=recurrent_state, output_final_state=use_cache)
-        else:
-            raise NotImplementedError(f"Not supported mode `{mode}`.")
-
-        if past_key_values is not None:
-            if self.use_short_conv:
-                if self.share_conv_kernel:
-                    last_state = (conv_state, recurrent_state)
-                else:
-                    last_state = (conv_state_i, conv_state_f, recurrent_state)
-            else:
-                last_state = (recurrent_state,)
-            past_key_values.update(last_state, self.layer_idx, i.shape[2])
-
-        o = rearrange(o, 'b h l d -> b l (h d)')
-        o = self.g_norm(self.g_proj(hidden_states), o)
-        o = self.o_proj(o)
-
-        return o, None, past_key_values
-
-    def init_state(self, batch_size: int) -> Tuple[torch.Tensor]:
-        param = next(self.parameters())
-        state = tuple()
-        if self.use_short_conv:
-            if self.share_conv_kernel:
-                state += (param.new_zeros(batch_size, self.hidden_size, self.conv_size),)
-            else:
-                state += (param.new_zeros(batch_size, self.hidden_size, self.conv_size),
-                          param.new_zeros(batch_size, self.hidden_size, self.conv_size),
-                          param.new_zeros(batch_size, self.hidden_size, self.conv_size))
-        state += (param.new_zeros(batch_size, self.num_heads, self.head_dim),)
-        return state
-
-    def state_size(self, **kwargs) -> int:
-        state_size = self.hidden_size
-        for module in self.children():
-            if isinstance(module, ShortConvolution):
-                state_size += module.state_size
-        return state_size
+        return outputs.view(batch_size, seq_len, -1)

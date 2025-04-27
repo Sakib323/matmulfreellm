@@ -6,45 +6,41 @@ from transformers.configuration_utils import PretrainedConfig
 
 
 class HGRNBitConfig(PretrainedConfig):
-
     model_type = 'hgrn_bit'
     keys_to_ignore_at_inference = ['past_key_values']
 
     def __init__(
-        self,
-        vocab_size: int = 32000,
-        hidden_size: int = 2048,
-        num_hidden_layers: int = 24,
-        attn_mode: str = "fused_recurrent",
-        num_heads: Optional[int] = 1,
-        expand_ratio: Optional[int] = 1,
-        use_short_conv: bool = False,
-        conv_size: int = 4,
-        share_conv_kernel: bool = True,
-        use_lower_bound: bool = True,
-        hidden_ratio: Optional[int] = 4,
-        intermediate_size: Optional[int] = None,
-        hidden_act: str = "swish",
-        max_position_embeddings: int = 2048,
-        rms_norm_eps: float = 1e-6,
-        use_cache: bool = True,
-        pad_token_id: int = None,
-        bos_token_id: int = 1,
-        eos_token_id: int = 2,
-        tie_word_embeddings: bool = False,
-        initializer_range: float = 0.02,
-        fuse_cross_entropy: bool = True,
-        rotary_embeddings: bool = True,
-        rope_theta: float = 10000.0,
-        use_ternary_rope: bool = True,
-
-        moe: bool = False,
-        num_experts: int = 8,
-        num_experts_per_tok: int = 2,
-        moe_intermediate_size: Optional[int] = None,
-
-        **kwargs
-        
+            self,
+            vocab_size: int = 32000,
+            hidden_size: int = 2048,
+            num_hidden_layers: int = 24,
+            attn_mode: str = "fused_recurrent",
+            num_heads: Optional[int] = 1,
+            expand_ratio: Optional[int] = 1,
+            use_short_conv: bool = False,
+            conv_size: int = 4,
+            share_conv_kernel: bool = True,
+            use_lower_bound: bool = True,
+            hidden_ratio: Optional[int] = 4,
+            intermediate_size: Optional[int] = None,
+            hidden_act: str = "swish",
+            max_position_embeddings: int = 2048,
+            rms_norm_eps: float = 1e-6,
+            use_cache: bool = True,
+            pad_token_id: int = None,
+            bos_token_id: int = 1,
+            eos_token_id: int = 2,
+            tie_word_embeddings: bool = False,
+            initializer_range: float = 0.02,
+            fuse_cross_entropy: bool = True,
+            rotary_embeddings: bool = True,
+            rope_theta: float = 10000.0,
+            use_ternary_rope: bool = True,
+            moe: bool = False,
+            num_experts: int = 8,
+            num_experts_per_tok: int = 2,
+            moe_intermediate_size: Optional[int] = None,
+            **kwargs
     ):
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
@@ -64,16 +60,13 @@ class HGRNBitConfig(PretrainedConfig):
         self.use_cache = use_cache
         self.initializer_range = initializer_range
         self.fuse_cross_entropy = fuse_cross_entropy
-
         self.rotary_embeddings = rotary_embeddings
         self.rope_theta = rope_theta
         self.use_ternary_rope = use_ternary_rope
-
         self.moe = moe
         self.num_experts = num_experts
         self.num_experts_per_tok = num_experts_per_tok
-        self.moe_intermediate_size = moe_intermediate_size or (self.hidden_size * 4)
-
+        self.moe_intermediate_size = moe_intermediate_size
         super().__init__(
             pad_token_id=pad_token_id,
             bos_token_id=bos_token_id,
