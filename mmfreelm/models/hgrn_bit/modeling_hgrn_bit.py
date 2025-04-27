@@ -90,6 +90,7 @@ class HGRNBitBlock(nn.Module):
         else:
             self.mlp = HGRNBitMLP(
                 hidden_size=config.hidden_size,
+                hidden_ratio=config.hidden_ratio,
                 intermediate_size=config.intermediate_size,
                 hidden_act=config.hidden_act
             )
