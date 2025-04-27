@@ -4,7 +4,6 @@ from torch import Tensor
 from typing import Optional
 
 from mmfreelm.ops.fusedbitnet import FusedBitLinear as BitLinear
-from mmfreelm.models.hgrn_bit.modeling_hgrn_bit import HGRNBitMLP
 from mmfreelm.modules import RMSNorm
 
 class HGRNBitMoE(nn.Module):
@@ -17,6 +16,7 @@ class HGRNBitMoE(nn.Module):
         self.expert_capacity = int(config.moe_intermediate_size * 1.5)  # Buffer capacity
 
         # Expert parameters
+        from mmfreelm.models.hgrn_bit.modeling_hgrn_bit import HGRNBitMLP
         self.experts = nn.ModuleList([
             HGRNBitMLP(
                 hidden_size=config.hidden_size,
