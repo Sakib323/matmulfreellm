@@ -81,12 +81,7 @@ class HGRNBitBlock(nn.Module):
 
         # Modified MLP initialization
         if config.moe:
-            self.mlp = HGRNBitMoE(
-                hidden_size=config.hidden_size,
-                intermediate_size=config.moe_intermediate_size,
-                num_experts=config.num_experts,
-                num_experts_per_tok=config.num_experts_per_tok
-            )
+            self.mlp = HGRNBitMoE(config)
         else:
             self.mlp = HGRNBitMLP(
                 hidden_size=config.hidden_size,
