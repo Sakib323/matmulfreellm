@@ -75,6 +75,9 @@ class HGRNBitBlock(nn.Module):
             share_conv_kernel=config.share_conv_kernel,
             layernorm_eps=config.rms_norm_eps,
             layer_idx=layer_idx
+            rotary_embeddings=config.rotary_embeddings,
+            rope_theta=config.rope_theta,
+            use_ternary_rope=config.use_ternary_rope
         )
         self.mlp_norm = RMSNorm(hidden_size=config.hidden_size, eps=config.rms_norm_eps)
 
