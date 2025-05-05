@@ -1,7 +1,7 @@
 # rotary_embedding.py
+
 import torch
 import torch.nn as nn
-from mmfreelm.ops.fusedbitnet import FusedBitLinear as BitLinear
 
 class RotaryEmbedding(nn.Module):
     def __init__(self, dim, max_position_embeddings=2048, base=10000, use_ternary=True):
@@ -18,7 +18,7 @@ class RotaryEmbedding(nn.Module):
         
         # Initialize with ternary weights if specified
         if use_ternary:
-            self.inv_freq = nn.Parameter(self._get_ternary_init(dim))
+            self.inv_freq = nn.Parameter(self._get_ternary_init(dim), requires_grad=False)
         else:
             inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2).float() / dim))
             self.register_buffer("inv_freq", inv_freq, persistent=False)
@@ -37,19 +37,16 @@ class RotaryEmbedding(nn.Module):
     def _set_cos_sin_cache(self, seq_len, device, dtype):
         self.max_seq_len_cached = seq_len
         t = torch.arange(self.max_seq_len_cached, device=device, dtype=self.inv_freq.dtype)
-        
-        if self.use_ternary:
-            freqs = torch.outer(t, self.inv_freq)
-        else:
-            freqs = torch.outer(t, self.inv_freq)
-        
-        # Different from paper, but it uses a different permutation in order to obtain the same calculation
+        freqs = torch.outer(t, self.inv_freq)
         emb = torch.cat((freqs, freqs), dim=-1)
-        self.register_buffer("cos_cached", emb.cos().to(dtype), persistent=False)
-        self.register_buffer("sin_cached", emb.sin().to(dtype), persistent=False)
+        # Detach to ensure no computation graph is kept!
+        self.register_buffer("cos_cached", emb.cos().to(dtype).detach(), persistent=False)
+        self.register_buffer("sin_cached", emb.sin().to(dtype).detach(), persistent=False)
 
     def forward(self, x, seq_len=None):
         # x: [bs, num_attention_heads, seq_len, head_size]
+        if seq_len is None:
+            seq_len = x.shape[-2]
         if seq_len > self.max_seq_len_cached:
             self._set_cos_sin_cache(seq_len, device=x.device, dtype=x.dtype)
         return (
